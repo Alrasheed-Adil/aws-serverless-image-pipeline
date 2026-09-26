@@ -96,11 +96,6 @@ curl -X PUT "PRESIGNED_URL_HERE" -H "Content-Type: image/jpeg" --data-binary "@t
 
 Built in `eu-central-1` (Frankfurt) — chosen for full service availability without opt-in region delays (the geographically closer Bahrain/UAE regions require manual opt-in and, at the time of building, added friction not worth the marginal latency difference for a portfolio-scale project).
 
-## Remaining before submission
-
-- [x] S3 lifecycle rules (transition + expiration, both buckets)
-- [x] Demo video recording
-
 ## Demo
 
 [Watch the demo video](https://youtu.be/XUiurJWkBlU)
