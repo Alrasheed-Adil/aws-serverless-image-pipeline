@@ -45,17 +45,17 @@ flowchart LR
 
 ## AWS services used
 
-| Service            | Role                                                                                                                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S3**             | Source bucket (raw uploads) and destination bucket (processed images)                                                                                                                    |
-| **SQS**            | Decouples the S3 upload event from Lambda processing; includes a dead-letter queue                                                                                                       |
-| **Lambda**         | Six functions: `generate-upload-url` (presigned URLs), `starter` (kicks off the workflow), and four workflow steps — `validate-image`, `resize-image`, `watermark-image`, `store-result` |
-| **Step Functions** | Standard workflow orchestrating validate → resize → watermark → store as separate states, each with its own `Catch` routing failures to a shared notification step                       |
-| **DynamoDB**       | Stores per-image metadata: dimensions, processing status, timestamp                                                                                                                      |
-| **API Gateway**    | HTTP API fronting the presigned-URL Lambda                                                                                                                                               |
-| **CloudFront**     | Global CDN in front of the destination bucket, via Origin Access Control (bucket stays private)                                                                                          |
-| **SNS**            | Email notification on successful or failed processing — the failure path is a _native_ Step Functions → SNS integration, no Lambda needed for that hop                                   |
-| **IAM**            | Least-privilege scoped roles/policies per function and per user — no wildcard `AdministratorAccess`                                                                                      |
+| Service            | Role                                                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **S3**             | Source bucket (raw uploads, 7-day expiration lifecycle rule) and destination bucket (processed images, 30-day transition to Infrequent Access + 1-day expiration on orphaned `tmp/` files) |
+| **SQS**            | Decouples the S3 upload event from Lambda processing; includes a dead-letter queue                                                                                                         |
+| **Lambda**         | Six functions: `generate-upload-url` (presigned URLs), `starter` (kicks off the workflow), and four workflow steps — `validate-image`, `resize-image`, `watermark-image`, `store-result`   |
+| **Step Functions** | Standard workflow orchestrating validate → resize → watermark → store as separate states, each with its own `Catch` routing failures to a shared notification step                         |
+| **DynamoDB**       | Stores per-image metadata: dimensions, processing status, timestamp                                                                                                                        |
+| **API Gateway**    | HTTP API fronting the presigned-URL Lambda                                                                                                                                                 |
+| **CloudFront**     | Global CDN in front of the destination bucket, via Origin Access Control (bucket stays private)                                                                                            |
+| **SNS**            | Email notification on successful or failed processing — the failure path is a _native_ Step Functions → SNS integration, no Lambda needed for that hop                                     |
+| **IAM**            | Least-privilege scoped roles/policies per function and per user — no wildcard `AdministratorAccess`                                                                                        |
 
 ## Design decisions (and why)
 
@@ -67,6 +67,7 @@ flowchart LR
 - **State is passed between steps by reference, not by value.** Step Functions payloads are capped at 256KB, so image bytes can't be threaded through the state machine directly — instead, `resize-image` writes an intermediate file to S3 and passes forward `{bucket, key}` for the next step to read. Same principle as a relay race: pass the baton's location, not the baton.
 - **The failure-notification step uses a native Step Functions → SNS service integration**, not a Lambda function. Step Functions can call several AWS services directly from a state definition — using that instead of a dedicated "send an SNS message" Lambda is one fewer function to maintain for a task that's really just a single API call.
 - **Each of the six Lambdas has its own least-privilege IAM role**, scoped only to what that specific function does (e.g. `validate-image` can only `GetObject` on the source bucket; it has no write access anywhere, no DynamoDB access, nothing it doesn't need).
+- **Lifecycle rules cover both transition and expiration**, on different buckets for different reasons: source-bucket originals expire after 7 days (no purpose once processed), destination-bucket images transition to Standard-IA after 30 days (heavily viewed early, rarely after), and orphaned `tmp/` intermediates expire after 1 day as a safety net in case a mid-pipeline crash ever leaves one behind.
 
 ## Testing the pipeline
 
@@ -90,9 +91,9 @@ Built in `eu-central-1` (Frankfurt) — chosen for full service availability wit
 
 ## Remaining before submission
 
-- [ ] S3 lifecycle rule (transition/expire objects by storage class) — not yet added
-- [ ] Demo video recording
+- [x] S3 lifecycle rules (transition + expiration, both buckets)
+- [x] Demo video recording
 
 ## Demo
 
-[Link to demo video — add before submission]
+[Watch the demo video](https://youtu.be/XUiurJWkBlU)
