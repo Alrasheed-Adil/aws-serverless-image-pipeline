@@ -1,0 +1,70 @@
+{
+  "Comment": "Image processing pipeline: validate -> resize -> watermark -> store",
+  "StartAt": "ValidateImage",
+  "States": {
+    "ValidateImage": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-central-1:372815111736:function:validate-image",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "ResizeImage"
+    },
+    "ResizeImage": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-central-1:372815111736:function:resize-image",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "WatermarkImage"
+    },
+    "WatermarkImage": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-central-1:372815111736:function:watermark-image",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "StoreResult"
+    },
+    "StoreResult": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-central-1:372815111736:function:store-result",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "ProcessingSucceeded"
+    },
+    "ProcessingSucceeded": {
+      "Type": "Succeed"
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:eu-central-1:372815111736:image-pipeline-notifications",
+        "Subject": "Image processing FAILED",
+        "Message.$": "States.Format('Processing failed for {}: {}', $.key, $.error.Cause)"
+      },
+      "Next": "ProcessingFailed"
+    },
+    "ProcessingFailed": {
+      "Type": "Fail"
+    }
+  }
+}

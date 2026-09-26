@@ -6,6 +6,24 @@ An event-driven image resize/watermark pipeline built on AWS, submitted as the g
 
 A user requests a presigned upload URL through an API, uploads an image directly to S3, and within seconds a resized, watermarked copy is available both in a private destination bucket and via a public CloudFront URL — with metadata recorded in DynamoDB and a notification sent on completion.
 
+## Repository structure
+
+```
+.
+├── README.md
+├── docs/
+│   └── architecture-diagram.png
+├── lambda_functions/
+│   ├── generate-upload-url/
+│   ├── starter/
+│   ├── validate-image/
+│   ├── resize-image/
+│   ├── watermark-image/
+│   └── store-result/
+└── state_machine_definition/
+    └── state-machine-definition.json
+```
+
 ## Architecture
 
 ![Architecture diagram](docs/architecture-diagram.png)
@@ -70,7 +88,7 @@ flowchart LR
 - **Least-privilege IAM throughout**, not `AdministratorAccess`. Each Lambda has its own role scoped to exactly the actions/resources it needs — e.g. `generate-upload-url`'s role can `s3:PutObject` on the source bucket and nothing else; it has no read access, no destination bucket access, no DynamoDB access.
 - **CloudFront reads from S3 via Origin Access Control, not a public bucket.** "Block all public access" stays on for both buckets; only CloudFront's specific distribution can read from the destination bucket, via a bucket policy scoped to its ARN.
 - **A custom Lambda Layer for Pillow**, built to match Lambda's exact runtime (Python 3.12, x86_64/manylinux2014) rather than relying on a local pip install, since Pillow ships compiled C extensions that must match the target OS/architecture exactly.
-- **The pipeline is orchestrated with Step Functions rather than one Lambda doing everything.** Each stage (validate, resize, watermark, store) is its own function, and the state machine — not a try/except block — decides what happens on failure. This means a failure at any stage is immediately visible as a named, isolated state in the execution graph, rather than requiring a stack-trace read to figure out which part of a monolithic function broke.
+- **The pipeline is orchestrated with Step Functions rather than one Lambda doing everything.** Each stage (validate, resize, watermark, store) is its own function (see [`lambda_functions/`](lambda_functions/)), and the state machine — not a try/except block — decides what happens on failure. The full definition is in [`state_machine_definition/state-machine-definition.json`](state_machine_definition/state-machine-definition.json). This means a failure at any stage is immediately visible as a named, isolated state in the execution graph, rather than requiring a stack-trace read to figure out which part of a monolithic function broke.
 - **State is passed between steps by reference, not by value.** Step Functions payloads are capped at 256KB, so image bytes can't be threaded through the state machine directly — instead, `resize-image` writes an intermediate file to S3 and passes forward `{bucket, key}` for the next step to read. Same principle as a relay race: pass the baton's location, not the baton.
 - **The failure-notification step uses a native Step Functions → SNS service integration**, not a Lambda function. Step Functions can call several AWS services directly from a state definition — using that instead of a dedicated "send an SNS message" Lambda is one fewer function to maintain for a task that's really just a single API call.
 - **Each of the six Lambdas has its own least-privilege IAM role**, scoped only to what that specific function does (e.g. `validate-image` can only `GetObject` on the source bucket; it has no write access anywhere, no DynamoDB access, nothing it doesn't need).
