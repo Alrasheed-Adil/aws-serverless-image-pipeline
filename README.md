@@ -8,6 +8,11 @@ A user requests a presigned upload URL through an API, uploads an image directly
 
 ## Architecture
 
+![Architecture diagram](docs/architecture-diagram.png)
+
+<details>
+<summary>Mermaid version (renders directly on GitHub, no image needed)</summary>
+
 ```mermaid
 flowchart LR
     User([User / Client])
@@ -42,6 +47,8 @@ flowchart LR
     SNSTopic --> Email
     DestBucket --> CF --> Viewer
 ```
+
+</details>
 
 ## AWS services used
 
